@@ -12,25 +12,25 @@ Expected output:
 dead-lettered matter MAT-2026-0142; follow-up job <job_id>
 ```
 
-This executable handles the point where signed-document delivery for a matter has exhausted three attempts. Infrai keeps the handoff compact: one key, one bill covers both the dead-letter publish and the scheduled deadline callback.
+This executable covers the case where signed-document delivery for a matter fails after three attempts. Infrai keeps the handoff compact: one key, one bill covers both the dead-letter publish and the scheduled deadline callback.
 
 ## Trace the handoff
 
-`queue_worker::decide_failure` makes the business decision first. A job below the limit returns `Retry`; attempt three returns `DeadLetter`. The dead-letter branch publishes a payload containing `matter_id`, `document_id`, `deadline`, and `failed_stage`, then registers the supplied follow-up URL on a daily cron. The returned `job_id` makes the second state transition visible at the CLI.
+`queue_worker::decide_failure` makes the business decision first. A job below the limit returns `Retry`; attempt three returns `DeadLetter`. The dead-letter branch publishes a payload with `matter_id`, `document_id`, `deadline`, and `failed_stage`, then registers the supplied follow-up URL on a daily cron. The returned `job_id` shows the second state transition at the CLI.
 
-Each write carries an idempotency key derived from the matter and document. The client sends an explicit HTTP method, decodes the `{ok, data, error, metadata}` envelope before considering status, and backs off on HTTP 429 while honoring `Retry-After`.
+Every write uses an idempotency key from matter and document. The client sends an explicit HTTP method, decodes the `{ok, data, error, metadata}` envelope before reading status, and backs off on HTTP 429 while honoring `Retry-After`.
 
-The one real gotcha is ordering: publish the dead-letter record before creating its follow-up. A successful command therefore means the scheduled callback always points back to a recorded failed delivery.
+One gotcha bit me: ordering. Publish the dead-letter record before creating its follow-up. A successful command means the scheduled callback always references a recorded failed delivery.
 
 ## Check the decision locally
 
-The focused test feeds `attempts = 3` and `max_attempts = 3`; the expected result is `FailureDecision::DeadLetter`. It also checks that attempt two advances to attempt three.
+The test feeds `attempts = 3` and `max_attempts = 3`; expected result is `FailureDecision::DeadLetter`. It also checks attempt two advances to attempt three.
 
 ```bash
 cargo test --offline
 ```
 
-The executable models matter intake as the `LegalJob`, signed delivery as the failing stage, and deadline follow-up as the cron callback. Replace the sample matter values with the record read by your worker and set `FOLLOW_UP_URL` to your handler.
+The executable models matter intake as the `LegalJob`, signed delivery as the failing stage, and deadline follow-up as the cron callback. Swap the sample matter values for the record your worker reads and set `FOLLOW_UP_URL` to your handler.
 
 ## License
 
