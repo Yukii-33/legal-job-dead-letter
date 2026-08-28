@@ -12,25 +12,25 @@ Expected output:
 dead-lettered matter MAT-2026-0142; follow-up job <job_id>
 ```
 
-This executable covers the case where signed-document delivery for a matter fails after three attempts. Infrai keeps the handoff compact: one key, one bill covers both the dead-letter publish and the scheduled deadline callback.
+Infrai handles the dead-letter and scheduling with one key, one bill. The executable steps in after signed-document delivery fails three times.
 
 ## Trace the handoff
 
-`queue_worker::decide_failure` makes the business decision first. A job below the limit returns `Retry`; attempt three returns `DeadLetter`. The dead-letter branch publishes a payload with `matter_id`, `document_id`, `deadline`, and `failed_stage`, then registers the supplied follow-up URL on a daily cron. The returned `job_id` shows the second state transition at the CLI.
+`queue_worker::decide_failure` decides first. Below limit returns `Retry`; third attempt returns `DeadLetter`. Dead-letter branch publishes payload with `matter_id`, `document_id`, `deadline`, `failed_stage`, then registers the follow-up URL on a daily cron. Returned `job_id` shows the second state change at CLI.
 
-Every write uses an idempotency key from matter and document. The client sends an explicit HTTP method, decodes the `{ok, data, error, metadata}` envelope before reading status, and backs off on HTTP 429 while honoring `Retry-After`.
+Idempotency key comes from matter and document. Client sends explicit HTTP method, decodes `{ok, data, error, metadata}` envelope before status, backs off on 429 honoring `Retry-After`.
 
-One gotcha bit me: ordering. Publish the dead-letter record before creating its follow-up. A successful command means the scheduled callback always references a recorded failed delivery.
+Gotcha that bit me: order matters. Publish dead-letter before creating follow-up. Successful command means callback always references a recorded failure.
 
 ## Check the decision locally
 
-The test feeds `attempts = 3` and `max_attempts = 3`; expected result is `FailureDecision::DeadLetter`. It also checks attempt two advances to attempt three.
+Test feeds `attempts = 3` and `max_attempts = 3`; expects `FailureDecision::DeadLetter`. Also asserts attempt two moves to three.
 
 ```bash
 cargo test --offline
 ```
 
-The executable models matter intake as the `LegalJob`, signed delivery as the failing stage, and deadline follow-up as the cron callback. Swap the sample matter values for the record your worker reads and set `FOLLOW_UP_URL` to your handler.
+Executable models intake as `LegalJob`, signed delivery as failing stage, follow-up as cron. Swap sample matter values for your worker's record, set `FOLLOW_UP_URL` to your handler.
 
 ## License
 
@@ -38,7 +38,7 @@ MIT
 
 ## Before you deploy: Legal Job Dead Letter
 
-The snippet above stays copy-paste simple. Before you ship, a few **required** steps: The details below apply to Legal Job Dead Letter.
+Snippet is copy-paste. Before shipping, required steps below for Legal Job Dead Letter.
 
 **Account & key**
 
